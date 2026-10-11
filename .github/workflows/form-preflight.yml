@@ -1,0 +1,111 @@
+name: Form fix preflight
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  packages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        sha: ["22893db6a351c05335d9913ce3f61d633e4d5ae7", "3dc5580abe640436b521e0449fc0c4ace9834755"]
+        python: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        library:
+          - {name: kiota_abstractions, path: packages/abstractions}
+          - {name: kiota_authentication_azure, path: packages/authentication/azure}
+          - {name: kiota_http, path: packages/http/httpx}
+          - {name: kiota_serialization_form, path: packages/serialization/form}
+          - {name: kiota_serialization_json, path: packages/serialization/json}
+          - {name: kiota_serialization_text, path: packages/serialization/text}
+          - {name: kiota_serialization_multipart, path: packages/serialization/multipart}
+          - {name: kiota_bundle, path: packages/bundle}
+    defaults:
+      run:
+        working-directory: ${{ matrix.library.path }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ matrix.sha }}
+          persist-credentials: false
+      - name: Verify tested commit
+        working-directory: .
+        env:
+          EXPECTED_SHA: ${{ matrix.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          git rev-parse HEAD
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Check formatting
+        run: yapf -dr ${{ matrix.library.name }}
+      - name: Check import order
+        run: isort --check-only ${{ matrix.library.name }}
+      - name: Pylint
+        run: pylint ${{ matrix.library.name }} --disable=W --rcfile=.pylintrc
+      - name: Mypy
+        run: mypy ${{ matrix.library.name }}
+      - name: Pytest
+        run: pytest
+  generated-types:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        sha: ["22893db6a351c05335d9913ce3f61d633e4d5ae7", "3dc5580abe640436b521e0449fc0c4ace9834755"]
+        python: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ matrix.sha }}
+          persist-credentials: false
+      - name: Verify tested commit
+        env:
+          EXPECTED_SHA: ${{ matrix.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          git rev-parse HEAD
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install dependencies
+        working-directory: tests/validation
+        run: pip install -r requirements-dev.txt
+      - name: Generated-code type checking
+        working-directory: tests/validation
+        run: mypy validation
+  codeql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        sha: ["22893db6a351c05335d9913ce3f61d633e4d5ae7", "3dc5580abe640436b521e0449fc0c4ace9834755"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ matrix.sha }}
+          persist-credentials: false
+      - name: Verify tested commit
+        env:
+          EXPECTED_SHA: ${{ matrix.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          git rev-parse HEAD
+      - uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
+        with:
+          languages: python
+      - uses: github/codeql-action/autobuild@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
+      - uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
+        with:
+          category: form-preflight-${{ matrix.sha }}
