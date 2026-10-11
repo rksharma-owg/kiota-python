@@ -44,8 +44,13 @@ jobs:
         run: pip install -r requirements-dev.txt
       - name: Check formatting
         run: yapf -dr ${{ matrix.library.name }}
-      - name: Check import order
-        run: isort --check-only ${{ matrix.library.name }}
+      - name: Normalize imports as upstream CI does
+        run: |
+          isort ${{ matrix.library.name }}
+          git diff --stat
+      - name: Verify contribution source needs no normalization
+        if: matrix.library.name == 'kiota_serialization_form'
+        run: git diff --exit-code -- .
       - name: Pylint
         run: pylint ${{ matrix.library.name }} --disable=W --rcfile=.pylintrc
       - name: Mypy
